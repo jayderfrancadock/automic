@@ -141,7 +141,6 @@ def run_process(params):
                 log_error("Nao foi encontrado o registro da data de referencia na tabela dbo.ControleProcessos")
                 return BATCH_DATAMOVIMENTO_INEXISTENTE_CODE
 
-            print(row)
             # coleta as informacoes para validacao
             data_termino = row["DataTerminoProcessos"]
             tipo_movimento = row["TipoMovimento"]
