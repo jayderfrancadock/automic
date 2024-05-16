@@ -250,10 +250,11 @@ def register_new_proc_execution(conn, server, database, procedure, run_date):
 
 def update_proc_execution_error(conn, rowid, error):
     with conn.cursor() as cursor:
+        error_message = str(error).replace("'", "''")
         cursor.execute(
              f"UPDATE dbo.HistoricoAutomicLog "
             "SET DataHoraFinal = SYSDATETIME(), "
-                f"MensagemErro = '{str(error).replace("\'", "\'\'")}', "
+                f"MensagemErro = '{error_message}', "
                 "StatusExecucao = 3 "
             f"WHERE HistoricoAutomicLog = {rowid}"
         )
