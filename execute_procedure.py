@@ -81,6 +81,8 @@ def parse_arguments(args):
     optionals = parser.add_argument_group()
     optionals.add_argument("--remove-from-batch",
                            action="store_true", help="remove a procedure da tabela do servico batch")
+    optionals.add_argument("--force-execution",
+                           action="store_true", help="forca a execucao da procedure, mesmo que exista um registro do tipo 1")
     optionals.add_argument("--run-date",
                            help="data de referencia para execucao (YYYY-MM-DD)")
     optionals.add_argument("-v", "--version",
@@ -206,21 +208,35 @@ def remove_procedure_from_batch_service(conn, procedure):
     return affected
 
 
-def check_procedure_already_executed(conn, procedure, run_date):
+def check_procedure_already_executed(conn, procedure, server, database, run_date, force):
     with conn.cursor() as cursor:
-        cursor.execute("SELECT * "
-                       "FROM dbo.HistoricoAutomicLog WITH (NOLOCK) "
-                       f"WHERE Nome_Procedure = '{procedure}' "
-                       f"AND DataMovimento = '{run_date}' "
-                       "AND StatusExecucao IN (1, 2)")
+        query = (
+            "SELECT * "
+            "FROM dbo.HistoricoAutomicLog WITH (NOLOCK) "
+            f"WHERE Nome_Procedure = '{procedure}' "
+            f"AND Ip_servidor = '{server}' "
+            f"AND Emissor = '{database}' "
+            f"AND DataMovimento = '{run_date}' "
+        )
+
+        # forca a execucao da procedure somente se estiver no status 1
+        # status 2 a procedure foi executada com sucesso e nao pode
+        # ser executada novamente
+        if force:
+            query += "AND StatusExecucao = 2"
+        else:
+            query += "AND StatusExecucao IN (1, 2)"
+
+        cursor.execute(query)
         rows = cursor.fetchall()
+
         if len(rows) > 0:
             return True
         else:
             return False
 
 
-def registrer_new_proc_execution(conn, server, database, procedure, run_date):
+def register_new_proc_execution(conn, server, database, procedure, run_date):
     with conn.cursor() as cursor:
         cursor.execute(
             f"INSERT INTO dbo.HistoricoAutomicLog "
@@ -231,13 +247,14 @@ def registrer_new_proc_execution(conn, server, database, procedure, run_date):
         conn.commit()
         return cursor.lastrowid
 
+
 def update_proc_execution_error(conn, rowid, error):
     with conn.cursor() as cursor:
         cursor.execute(
-            f"UPDATE dbo.HistoricoAutomicLog "
+             f"UPDATE dbo.HistoricoAutomicLog "
             "SET DataHoraFinal = SYSDATETIME(), "
-                f"MensagemErro = '{str(error)}', "
-                "StatusExecucao = 3"
+                f"MensagemErro = '{str(error).replace("\'", "\'\'")}', "
+                "StatusExecucao = 3 "
             f"WHERE HistoricoAutomicLog = {rowid}"
         )
         affected = cursor.rowcount
@@ -262,10 +279,14 @@ def execute_procedure(conn, procedure, run_date):
     try:
         with conn.cursor() as cursor:
             cursor.execute(
-                f"EXEC [dbo].[{procedure}] '{run_date}'"
+                f"EXEC [dbo].[{procedure}] '{run_date}', null, null, null"
             )
+        conn.commit()
+        return None
     except pymssql.Error as error:
-        return sys.exception()
+        conn.rollback()
+        return error
+
 
 def run_process(params):
     try:
@@ -305,15 +326,16 @@ def run_process(params):
             # procedure ja executou na data de referencia no dia atual ?
             log_info(f"Verificando a execucao da procedure '{params.issuer_procedure}' "
                      f"na data de referenca '{params.run_date}' ...")
-            if check_procedure_already_executed(logbatch_conn, params.issuer_procedure, params.run_date):
+            if check_procedure_already_executed(logbatch_conn, params.issuer_procedure, params.issuer_server,
+                                                params.issuer_database, params.run_date, params.force_execution):
                 log_error(f"Procedure '{params.issuer_procedure}' na "
                           f"data de referencia {params.run_date} já possui execucao (HistoricoAutomicLog)'")
                 return PROC_JA_EXECUTADA_DATAMOVIMENTO_CODE
 
             log_info(f"Registrando nova execucao da procedure '{params.issuer_procedure}' "
                      f"com data de referencia {params.run_date}")
-            rowid = registrer_new_proc_execution(logbatch_conn, params.issuer_server, params.issuer_database,
-                                     params.issuer_procedure, params.run_date)
+            rowid = register_new_proc_execution(logbatch_conn, params.issuer_server, params.issuer_database,
+                                                params.issuer_procedure, params.run_date)
             log_info(f"Id da execucao registrada '{rowid}'")
 
             log_info(f"Executando procedure '{params.issuer_procedure}' com data de referencia {params.run_date}")
@@ -323,7 +345,7 @@ def run_process(params):
                 update_proc_execution_error(logbatch_conn, rowid, error)
                 log_error("Erro ao executar a procedure")
                 log_error(str(error))
-                log_empty()
+                traceback.print_exception(error)
                 return DATABASE_ERROR_CODE
 
             update_proc_execution_success(logbatch_conn, rowid)
