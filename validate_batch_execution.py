@@ -32,24 +32,24 @@ PARAM_REQUIRED_EMPTY_CODE = 202
 DATABASE_ERROR_CODE = 203
 
 
-def log_empty():
-    print("")
+def _log(message):
+    print(message)
 
 
-def log(message):
-    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {message}")
+def log_with_datetime(message):
+    _log(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {message}")
 
 
 def log_info(message):
-    log(f"[INFO] {message}")
+    log_with_datetime(f"[INFO] {message}")
 
 
 def log_error(message):
-    log(f"[ERROR] {message}")
+    log_with_datetime(f"[ERROR] {message}")
 
 
 def log_warn(message):
-    log(f"[WARN] {message}")
+    log_with_datetime(f"[WARN] {message}")
 
 
 def parse_arguments(args):
@@ -116,15 +116,16 @@ def run_process(params):
 
     try:
         log_info("Processo de validacao do BATCH ... ")
-        log_empty()
+        _log("")
 
         log_info(f"Data de referencia definida para: '{params.run_date}'")
 
-        log_empty()
+        _log("")
         log_info("Realizando conexao com banco de dados")
         log_info(f"Instancia: {params.issuer_server}")
         log_info(f"Banco de dados: {params.issuer_database}")
         log_info(f"Usuario: {params.issuer_user}")
+        _log("")
 
         with (db_connect(params.issuer_server, params.issuer_database,
                          params.issuer_user, params.issuer_password) as conn,
@@ -170,8 +171,8 @@ def run_process(params):
     except pymssql.Error as error:
         log_error("Erro ao comunicar com banco de dados")
         log_error(str(error))
-        log_empty()
-        traceback.print_exc()
+        _log("")
+        _log(''.join(traceback.format_exception(error)))
         return DATABASE_ERROR_CODE
 
 
@@ -194,9 +195,9 @@ def main(argv):
 
     end_time = timer()
 
-    log_empty()
-    log(f"Return Code: {code}")
-    log(f"Execution Time: {str(timedelta(seconds=(end_time - start_time)))}")
+    _log("")
+    _log(f"Return Code: {code}")
+    _log(f"Execution Time: {str(timedelta(seconds=(end_time - start_time)))}")
     exit(code)
 
 

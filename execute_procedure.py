@@ -31,24 +31,24 @@ DATABASE_ERROR_CODE = 203
 PROCEDURE_NOT_EXISTS_CODE = 204
 
 
-def log_empty():
-    print("")
+def _log(message):
+    print(message)
 
 
-def log(message):
-    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {message}")
+def log_with_datetime(message):
+    _log(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {message}")
 
 
 def log_info(message):
-    log(f"[INFO] {message}")
+    log_with_datetime(f"[INFO] {message}")
 
 
 def log_error(message):
-    log(f"[ERROR] {message}")
+    log_with_datetime(f"[ERROR] {message}")
 
 
 def log_warn(message):
-    log(f"[WARN] {message}")
+    log_with_datetime(f"[WARN] {message}")
 
 
 def parse_arguments(args):
@@ -290,6 +290,24 @@ def execute_procedure(conn, procedure, run_date):
 
 
 def run_process(params):
+
+    log_info("Processo de execucao de procedure ... ")
+    _log("")
+
+    log_info(f"Procedure a ser executada: {params.issuer_procedure}")
+    log_info(f"Data de referencia definida para: '{params.run_date}'")
+
+    _log("")
+    log_info("Realizando conexao com banco de dados")
+    log_info(f"Emissor  - Instancia: {params.issuer_server}")
+    log_info(f"Emissor  - Banco de dados: {params.issuer_database}")
+    log_info(f"Emissor  - Usuario: {params.issuer_user}")
+    _log("")
+    log_info(f"LogBatch - Instancia: {params.logbatch_server}")
+    log_info(f"LogBatch - Banco de dados: {params.logbatch_database}")
+    log_info(f"LogBatch - Usuario: {params.logbatch_user}")
+    _log("")
+
     try:
         with (db_connect(params.issuer_server, params.issuer_database,
                          params.issuer_user, params.issuer_password) as issuer_conn,
@@ -301,15 +319,14 @@ def run_process(params):
             logbatch_conn.autocommit(False)
 
             # procedure existe no banco do emissor ou esta acessivel ?
-            log_info(f"Verficando a existencia da procedure '{params.issuer_procedure}' "
-                     f"no banco de dados '{params.issuer_database}' ...")
+            log_info(f"Verficando a existencia da procedure no banco de dados ...")
             if not check_procedure_exists(issuer_conn, params.issuer_procedure):
                 log_error(f"Procedure '{params.issuer_procedure}' "
                           f"nao encontrada no banco de dados '{params.issuer_database}'")
                 return PROCEDURE_NOT_EXISTS_CODE
 
             # procedure continua cadastrada no Servico Batch ?
-            log_info(f"Verificando procedure '{params.issuer_procedure}' no Servico Batch ...")
+            log_info(f"Verificando procedure no Servico Batch ...")
             exists = check_procedure_in_batch_service(issuer_conn, params.issuer_procedure)
 
             if exists and params.remove_from_batch:
@@ -325,28 +342,27 @@ def run_process(params):
                 log_info(f"Procedure '{params.issuer_procedure}' nao registrada no Servico Batch (ProcessosProcedures)")
 
             # procedure ja executou na data de referencia no dia atual ?
-            log_info(f"Verificando a execucao da procedure '{params.issuer_procedure}' "
-                     f"na data de referenca '{params.run_date}' ...")
+            log_info(f"Verificando a execucao da procedure na data de referenca ...")
             if check_procedure_already_executed(logbatch_conn, params.issuer_procedure, params.issuer_server,
                                                 params.issuer_database, params.run_date, params.force_execution):
                 log_error(f"Procedure '{params.issuer_procedure}' na "
                           f"data de referencia {params.run_date} já possui execucao (HistoricoAutomicLog)'")
                 return PROC_JA_EXECUTADA_DATAMOVIMENTO_CODE
 
-            log_info(f"Registrando nova execucao da procedure '{params.issuer_procedure}' "
-                     f"com data de referencia {params.run_date}")
+            log_info(f"Registrando nova execucao da procedure na data de referencia {params.run_date}")
             rowid = register_new_proc_execution(logbatch_conn, params.issuer_server, params.issuer_database,
                                                 params.issuer_procedure, params.run_date)
-            log_info(f"Id da execucao registrada '{rowid}'")
+            log_info(f"Id da execucao registrada '{rowid}' na HistoricoAutomicLog")
 
-            log_info(f"Executando procedure '{params.issuer_procedure}' com data de referencia {params.run_date}")
+            log_info(f"Executando procedure com data de referencia {params.run_date}")
             error = execute_procedure(issuer_conn, params.issuer_procedure, params.run_date)
 
             if error is not None:
                 update_proc_execution_error(logbatch_conn, rowid, error)
                 log_error("Erro ao executar a procedure")
                 log_error(str(error))
-                traceback.print_exception(error)
+                _log("")
+                _log(''.join(traceback.format_exception(error)))
                 return DATABASE_ERROR_CODE
 
             update_proc_execution_success(logbatch_conn, rowid)
@@ -357,8 +373,8 @@ def run_process(params):
     except pymssql.Error as error:
         log_error("Erro ao comunicar com banco de dados")
         log_error(str(error))
-        log_empty()
-        traceback.print_exc()
+        _log("")
+        _log(''.join(traceback.format_exception(error)))
         return DATABASE_ERROR_CODE
 
 
@@ -381,9 +397,9 @@ def main(argv):
 
     end_time = timer()
 
-    log_empty()
-    log(f"Return Code: {code}")
-    log(f"Execution Time: {str(timedelta(seconds=(end_time - start_time)))}")
+    _log("")
+    _log(f"Return Code: {code}")
+    _log(f"Execution Time: {str(timedelta(seconds=(end_time - start_time)))}")
     exit(code)
 
 
