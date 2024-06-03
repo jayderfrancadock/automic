@@ -280,7 +280,8 @@ def execute_procedure(conn, procedure, run_date):
     try:
         with conn.cursor() as cursor:
             cursor.execute(
-                f"EXEC [dbo].[{procedure}] '{run_date}', null, null, null"
+                f"SET DEADLOCK_PRIORITY HIGH; "
+                f"EXEC [dbo].[{procedure}] '{run_date}', null, null, null;"
             )
         conn.commit()
         return None
