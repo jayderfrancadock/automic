@@ -202,7 +202,6 @@ def remove_procedure_from_batch_service(conn, procedure):
             SELECT @Affected AS Affected
         """)
         row = cursor.fetchone()
-        conn.commit()
         affected = row["Affected"]
 
     return affected
@@ -283,10 +282,8 @@ def execute_procedure(conn, procedure, run_date):
                 f"SET DEADLOCK_PRIORITY HIGH; "
                 f"EXEC [dbo].[{procedure}] '{run_date}', null, null, null;"
             )
-        conn.commit()
         return None
     except pymssql.Error as error:
-        conn.rollback()
         return error
 
 
@@ -316,7 +313,7 @@ def run_process(params):
                          params.logbatch_user, params.logbatch_password) as logbatch_conn):
 
             # desativa o autocommit para maior controle
-            issuer_conn.autocommit(False)
+            issuer_conn.autocommit(True)
             logbatch_conn.autocommit(False)
 
             # procedure existe no banco do emissor ou esta acessivel ?
