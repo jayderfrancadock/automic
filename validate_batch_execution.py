@@ -181,7 +181,7 @@ def run_process(params):
                 if rows is not None and len(rows) > 0:
                     log_error("Batch complemento ainda em execucao ou com erro ... ")
                     for row in rows:
-                        log_error(f"Procedure '{row["NomeProcedure"]}' ({row["Id_Processo"]}) com status '{row["FlagExecutado"]}'")
+                        log_error(f"Procedure '{row['NomeProcedure']}' ({row['Id_Processo']}) com status '{row['FlagExecutado']}'")
                     return BATCH_NAO_EXECUTADO_CODE
 
                 log_info(f"Batch complemento finalizado.")
