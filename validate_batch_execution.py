@@ -70,6 +70,8 @@ def parse_arguments(args):
     optionals = parser.add_argument_group()
     optionals.add_argument("--run-date",
                            help="data de referencia no qual será avaliado o batch (YYYY-MM-DD)")
+    optionals.add_argument("--wait-batch-complemento",
+                           action="store_true", help="aguarda a finalizacao do batch de complemento")
     optionals.add_argument("-v", "--version", action='version', version=version_text,
                            help="output version information and exit")
     optionals.add_argument("-h", "--help", action='help', help="display this help and exit")
@@ -163,7 +165,26 @@ def run_process(params):
                 log_error(f"Batch ainda nao executado para a data de referencia {params.run_date}")
                 return BATCH_NAO_EXECUTADO_CODE
 
-            log_info(f"Batch finalizado no horario '{data_termino}'")
+            log_info(f"Batch core finalizado no horario '{data_termino}'")
+
+            if params.wait_batch_complemento:
+                _log("")
+                log_info(f"Obtem dados na tabela dbo.ControleProcessosProcedures com DataMovimento {params.run_date}")
+
+                cursor.execute("SELECT cpp.Id_Processo, pp.NomeProcedure, cpp.FlagExecutado "
+                               "FROM dbo.ControleProcessosProcedures cpp WITH (NOLOCK) "
+                                    "LEFT JOIN dbo.ProcessosProcedures pp WITH (NOLOCK) "
+                                        "ON (pp.Id_Processo = cpp.Id_Processo) "
+                               f"WHERE DataMovimento = '{params.run_date}' "
+                               "AND FlagExecutado IN (0, 1)")
+                rows = cursor.fetchall()
+                if rows is not None and len(rows) > 0:
+                    log_error("Batch complemento ainda em execucao ou com erro ... ")
+                    for row in rows:
+                        log_error(f"Procedure '{row["NomeProcedure"]}' ({row["Id_Processo"]}) com status '{row["FlagExecutado"]}'")
+                    return BATCH_NAO_EXECUTADO_CODE
+
+                log_info(f"Batch complemento finalizado.")
 
         return SUCCESS_CODE
 
