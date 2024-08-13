@@ -82,7 +82,8 @@ def parse_arguments(args):
     optionals.add_argument("--remove-from-batch",
                            action="store_true", help="remove a procedure da tabela do servico batch")
     optionals.add_argument("--force-execution",
-                           action="store_true", help="forca a execucao da procedure, mesmo que exista um registro do tipo 1")
+                           action="store_true", help="forca a execucao da procedure, "
+                                                     "mesmo que exista um registro do tipo 1")
     optionals.add_argument("--run-date",
                            help="data de referencia para execucao (YYYY-MM-DD)")
     optionals.add_argument("-v", "--version",
@@ -156,6 +157,21 @@ def check_procedure_exists(conn, procedure):
             return True
         else:
             return False
+
+
+def register_new_procedure(conn, database, procedure):
+    with conn.cursor() as cursor:
+        cursor.execute(
+            f"INSERT INTO dbo.FluxoProceduresAutomic "
+                "(Emissor, NomeProcedure) "
+            f"SELECT '{database}', '{procedure}' "
+             "WHERE NOT EXISTS (SELECT 1 "
+                               "FROM dbo.FluxoProceduresAutomic "
+                              f"WHERE Emissor = '{database}' "
+                              f"AND NomeProcedure = '{procedure}')"
+        )
+        conn.commit()
+        return cursor.lastrowid
 
 
 def check_procedure_in_batch_service(conn, procedure):
@@ -279,7 +295,7 @@ def execute_procedure(conn, procedure, run_date):
     try:
         with conn.cursor() as cursor:
             cursor.execute(
-                f"SET DEADLOCK_PRIORITY HIGH; "
+                "SET DEADLOCK_PRIORITY HIGH; "
                 f"EXEC [dbo].[{procedure}] '{run_date}', null, null, null;"
             )
         return None
@@ -332,6 +348,9 @@ def run_process(params):
                 log_info(f"Removendo procedure '{params.issuer_procedure}' "
                          "do servico Batch (--remove-from-batch)")
                 remove_procedure_from_batch_service(issuer_conn, params.issuer_procedure)
+                # registra na tabela que contem o cadastro das procedures no fluxo
+                log_info(f"Registrando procedure '{params.issuer_procedure}' no fluxo")
+                register_new_procedure(logbatch_conn, params.issuer_database, params.issuer_procedure)
             elif exists:
                 log_error(f"Procedure '{params.issuer_procedure}' "
                           "registrada para ser executada no Servico Batch (ProcessosProcedures)")
