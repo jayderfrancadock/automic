@@ -163,6 +163,12 @@ def check_procedure_exists(conn_params, procedure):
     except pymssql.Error as error:
         return error
 
+def callback_msghandler(msgstate, severity, srvname, procname, line, msgtext):
+    if procname is not None or procname.strip() != "":
+        log_warn(f"Server {srvname}, Level {severity}, State {msgstate}, Procedure {procname}, Line {line}: {msgtext}")
+    else:
+        log_warn(f"Server {srvname}, Level {severity}, State {msgstate}, Line {line}: {msgtext}")
+
 def execute_procedure(conn_params, procedure):
 
     try:
@@ -173,6 +179,9 @@ def execute_procedure(conn_params, procedure):
             # pois somente nela que tem o nome da procedure
             # que gerou erro
             _mssql_conn = conn._conn
+
+            # captura de mensagens do console SQL
+            _mssql_conn.set_msghandler(callback_msghandler)
 
             # executa a procedure informada sem parametros
             _mssql_conn.execute_non_query(
@@ -202,7 +211,7 @@ def execute_procedure(conn_params, procedure):
         # adiciona uma nova entrada na tupla com mais informacoes
         if procname is not None:
             msg_tuple += ('SQL Server message %d, severity %d, state %d, procedure %s, line %d' %
-                         (number, severity, state, procname,line)),
+                         (number, severity, state, procname, line)),
         else:
             msg_tuple += ('SQL Server message %d, severity %d, state %d, line %d' %
                          (number, severity, state, line)),
@@ -216,7 +225,7 @@ def execute_procedure(conn_params, procedure):
             elif number in (515, 547, 2601, 2627):
                 class_ex = pymssql.IntegrityError
             else:
-                clazz = pymssql.OperationalError
+                class_ex = pymssql.OperationalError
         elif type(error) is pymssql._mssql.MSSQLDriverException:
             class_ex = pymssql.InternalError
         else:
